@@ -12,6 +12,8 @@
   "type": "commonjs",
   "dependencies": {
     "bullmq": "^5.77.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "redis": "^6.0.0"
   }
 }
