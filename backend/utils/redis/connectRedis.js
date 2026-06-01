@@ -8,7 +8,7 @@ const client = createClient({
 });
 
 // 2. Define your test function using that same client
-export async function testConnection() {
+export async function testRedisConnection() {
     try {
         await client.connect();
         console.log("Connected to Redis!");

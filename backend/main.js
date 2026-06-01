@@ -4,7 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { testConnection } from './utils/index.js';
+import { testRedisConnection, testSupabaseConnection } from './utils/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -39,7 +39,8 @@ app.get('/health', (req, res) => {
 const startServer = async () => {
   try {
     // Initialize DB/Redis connections
-    await testConnection();
+    await testRedisConnection();
+    await testSupabaseConnection();
 
     app.listen(PORT, () => {
       console.log(`🚀 Server is listening on http://localhost:${PORT}`);
