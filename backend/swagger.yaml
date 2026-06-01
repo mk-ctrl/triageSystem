@@ -29,3 +29,22 @@ paths:
                     type: string
                     format: date-time
                     example: '2026-06-01T23:37:41.000Z'
+  /api/data:
+    post:
+      summary: Submit data to Supabase
+      description: Receives a JSON payload from the frontend and inserts it into the Supabase database.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Any valid JSON object representing the data to insert.
+              additionalProperties: true
+      responses:
+        '201':
+          description: Data successfully inserted
+        '400':
+          description: Invalid request payload
+        '500':
+          description: Internal server error

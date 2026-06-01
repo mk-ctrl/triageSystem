@@ -5,6 +5,7 @@ import YAML from 'yamljs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { testRedisConnection, testSupabaseConnection } from './utils/index.js';
+import dataRoutes from './routes/dataRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -25,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 // Swagger UI Route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+app.use('/api', dataRoutes);
 
 // Root / Health Check endpoint
 app.get('/health', (req, res) => {
