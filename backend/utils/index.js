@@ -1,0 +1,1 @@
+export { testConnection } from "./redis/connectRedis.js";

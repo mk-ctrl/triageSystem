@@ -1,9 +1,53 @@
-const { createClient } = require("redis");
-require("dotenv").config();
+import express from 'express';
+import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yamljs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { testConnection } from './utils/index.js';
 
-const client = createClient({
-    url: process.env.REDIS_URL,
+// Load environment variables
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Load Swagger document
+const swaggerDocument = YAML.load(path.join(__dirname, 'swagger.yaml'));
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Swagger UI Route
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+
+// Root / Health Check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Triage System API is online',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-client.connect();
-console.log("Connected to Redis");
+// Start the Express server and connect to services
+const startServer = async () => {
+  try {
+    // Initialize DB/Redis connections
+    await testConnection();
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is listening on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
