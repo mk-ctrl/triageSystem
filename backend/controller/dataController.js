@@ -1,4 +1,5 @@
 import { pool } from '../utils/supabase/connectSupabase.js';
+import { ticketQueue } from '../utils/bullmq/queue.js';
 
 /**
  * Controller to handle incoming data from the frontend and insert it into Supabase.
@@ -25,6 +26,12 @@ export const insertData = async (req, res) => {
         const query = `INSERT INTO tickets (${columns}) VALUES (${placeholders}) RETURNING *`;
         
         const result = await pool.query(query, values);
+        
+        // Enqueue the new ticket ID into BullMQ for asynchronous processing
+        if (result.rows && result.rows.length > 0) {
+            const newTicketId = result.rows[0].id; // Assuming 'id' is the primary key column
+            await ticketQueue.add('processTicket', { ticketId: newTicketId });
+        }
         
         return res.status(201).json({
             message: 'Data successfully inserted into Supabase',

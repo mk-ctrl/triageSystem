@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { testRedisConnection, testSupabaseConnection } from './utils/index.js';
 import dataRoutes from './routes/dataRoutes.js';
+import './utils/bullmq/worker.js';
 
 // Load environment variables
 dotenv.config();
