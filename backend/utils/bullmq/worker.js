@@ -1,6 +1,8 @@
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import dotenv from 'dotenv';
+import { pool } from '../supabase/connectSupabase.js';
+import { processTicketTask } from './taskProcessor.js';
 dotenv.config();
 
 // Create an IORedis connection for the worker
@@ -12,15 +14,41 @@ const connection = new IORedis(process.env.REDIS_URL, {
 export const ticketWorker = new Worker(
     'ticketQueue',
     async (job) => {
-        // Here we handle the job logic. For now, we simulate backend assignment/processing
         const { ticketId } = job.data;
         console.log(`[Worker] Picked up job ${job.id} for ticket ID: ${ticketId}`);
         
-        // Simulate heavy processing / routing logic here
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        console.log(`[Worker] Successfully processed ticket ID: ${ticketId}`);
-        return { status: 'completed', assignedTo: 'backend-agent' };
+        try {
+            // 1. Mark as processing in DB and fetch raw_text
+            const ticketResult = await pool.query(
+                'UPDATE tickets SET status = $1 WHERE id = $2 RETURNING raw_text', 
+                ['processing', ticketId]
+            );
+
+            if (ticketResult.rows.length === 0) {
+                throw new Error(`Ticket ID ${ticketId} not found in database.`);
+            }
+            const rawText = ticketResult.rows[0].raw_text;
+
+            // 2. Perform the heavy lifting task (AI classification)
+            const result = await processTicketTask(ticketId, rawText);
+            
+            // 3. Extract the drafted response and save the rest to the JSONB column
+            const { drafted_response, ...classification } = result;
+
+            // 4. Mark as completed and save data in DB
+            await pool.query(
+                'UPDATE tickets SET status = $1, classification = $2, drafted_response = $3 WHERE id = $4', 
+                ['completed', classification, drafted_response, ticketId]
+            );
+
+            console.log(`[Worker] Successfully processed and updated ticket ID: ${ticketId}`);
+            return result;
+        } catch (error) {
+            console.error(`[Worker] Error processing ticket ID: ${ticketId}`, error);
+            // Optionally mark as failed in DB
+            await pool.query('UPDATE tickets SET status = $1 WHERE id = $2', ['failed', ticketId]);
+            throw error;
+        }
     },
     {
         connection,
