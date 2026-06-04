@@ -1,4 +1,4 @@
-import { classifyTicket } from './utils/agent/agent.js';
+import { classifyTicket } from '../agent/agent.js';
 
 async function run() {
     console.log("Testing Hugging Face LLM Integration...");

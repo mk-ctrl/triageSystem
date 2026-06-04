@@ -29,17 +29,27 @@ export const ticketWorker = new Worker(
             }
             const rawText = ticketResult.rows[0].raw_text;
 
-            // 2. Perform the heavy lifting task (AI classification)
+            // 2. Perform the heavy lifting task (AI classification or cache hit)
             const result = await processTicketTask(ticketId, rawText);
             
-            // 3. Extract the drafted response and save the rest to the JSONB column
-            const { drafted_response, ...classification } = result;
+            // 3. Extract the drafted response, cache metrics, and save the rest to the JSONB column
+            const { drafted_response, embedding, cacheHit, ...classification } = result;
 
             // 4. Mark as completed and save data in DB
             await pool.query(
                 'UPDATE tickets SET status = $1, classification = $2, drafted_response = $3 WHERE id = $4', 
                 ['completed', classification, drafted_response, ticketId]
             );
+
+            // 5. If it was a cache miss, save the new embedding to enrich the semantic cache
+            if (!cacheHit && embedding) {
+                const embeddingString = `[${embedding.join(',')}]`;
+                await pool.query(
+                    'INSERT INTO ticket_embeddings (ticket_id, embedding) VALUES ($1, $2)',
+                    [ticketId, embeddingString]
+                );
+                console.log(`[Worker] Saved new embedding for ticket ID: ${ticketId} to semantic cache`);
+            }
 
             console.log(`[Worker] Successfully processed and updated ticket ID: ${ticketId}`);
             return result;

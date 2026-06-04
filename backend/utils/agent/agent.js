@@ -67,3 +67,17 @@ Return ONLY a strict, valid JSON object matching this schema exactly. Do not inc
     
     return parseAiResponse(rawResponse);
 }
+
+/**
+ * Generates a 768-dimensional vector embedding for the given text.
+ * @param {string} text The text to embed.
+ * @returns {Promise<number[]>} The vector embedding array.
+ */
+export async function generateEmbedding(text) {
+    console.log("[Agent] Generating embedding for text...");
+    const embedding = await client.featureExtraction({
+        model: "BAAI/bge-base-en-v1.5",
+        inputs: text,
+    });
+    return embedding;
+}
