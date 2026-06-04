@@ -21,7 +21,7 @@ export const processTicketTask = async (ticketId, rawText) => {
     console.log(`[Task Processor] Checking semantic cache...`);
     const { rows } = await pool.query(
         'SELECT * FROM match_tickets($1, $2, $3)',
-        [embeddingString, 0.95, 1] // Search for 95% similarity
+        [embeddingString, 0.85, 1] // Search for 85% similarity
     );
 
     if (rows.length > 0) {
