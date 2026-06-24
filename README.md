@@ -1,103 +1,178 @@
 # Triage System
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![License](https://img.shields.io/badge/license-ISC-green)
 
 ## Overview
-The Triage System is an AI-powered, asynchronous customer support backend designed to automatically classify incoming support tickets. It intelligently routes raw ticket text through a vector similarity cache (via Supabase pgvector) to quickly bypass redundant LLM calls, falling back to a Hugging Face LLM (DeepSeek) to categorize, prioritize, gauge sentiment, and draft responses for novel issues.
+The Triage System is an AI-powered, asynchronous customer support backend and real-time dashboard designed to automatically ingest, classify, and resolve incoming support tickets. 
+
+It routes raw ticket text through a vector similarity cache (via Supabase pgvector) to bypass redundant LLM calls. On a cache miss, it falls back to a Hugging Face LLM (DeepSeek) to categorize, prioritize, gauge sentiment, and draft responses for novel issues. The system features a modern, real-time React agent dashboard connected via Socket.io.
+
+---
 
 ## Features
-* **Automated Ticket Classification:** Analyzes raw customer input to determine category, priority, and sentiment.
-* **Semantic Caching:** Uses embeddings (BAAI/bge-base-en-v1.5) and vector search to match new tickets against a database of previously solved issues, minimizing LLM usage and latency.
-* **Asynchronous Processing:** Leverages BullMQ and Redis to handle ticket processing in background worker queues, preventing API blocking.
-* **Drafted Responses:** Automatically generates draft responses for support agents based on intelligent LLM inferences.
-* **RESTful API:** Clean API endpoints built with Express, documented natively via Swagger UI.
+* **Automated Ticket Classification:** Analyzes customer queries to determine category, priority, and sentiment.
+* **Semantic Caching:** Uses embeddings (`BAAI/bge-base-en-v1.5`) and vector search to match new tickets against previous solved issues, minimizing LLM usage and latency.
+* **Asynchronous Processing:** Leverages BullMQ and Redis to handle heavy LLM processing in background worker queues, keeping the ingestion API non-blocking.
+* **Real-time Live Sync (WebSockets):** Utilizes Socket.io and BullMQ `QueueEvents` to broadcast ticket updates instantly to the agent dashboard as they move from `pending` ➔ `processing` ➔ `completed`.
+* **Interactive Agent Workspace:** Sleek React dashboard featuring an optimistic list view, connection indicator, and live response drafting panel.
+* **Human-in-the-Loop Override:** Provides an interface for agents to manually edit draft replies or override classification categories before saving back to Supabase.
+* **CRUD Management & Analytics:** REST API endpoints to retrieve paginated lists of tickets, fetch stats, update classifications, and query cache-hit ratios.
+
+---
 
 ## Tech Stack
-* **Backend Framework:** Node.js, Express.js
-* **Message Broker / Queues:** Redis, BullMQ
+* **Frontend:** React, Vite, Socket.io-client, Vanilla CSS (Premium Slate theme)
+* **Backend:** Node.js, Express.js, Socket.io, HTTP Server
+* **Message Broker & Queues:** Redis, BullMQ (Workers & QueueEvents)
 * **Database & Vector Search:** PostgreSQL (Supabase) with `pgvector`
-* **AI/ML Models:** Hugging Face Inference API (DeepSeek-V4-Flash for reasoning, BAAI/bge-base-en-v1.5 for embeddings)
+* **AI/ML Models:** Hugging Face Inference API (`DeepSeek-V4-Flash` for reasoning, `BAAI/bge-base-en-v1.5` for embeddings)
 * **API Documentation:** Swagger UI (`yamljs`, `swagger-ui-express`)
 
-## Architecture & Folder Structure
+---
+
+## System Architecture Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as React Dashboard (Vite)
+    participant Server as Express & Socket.io
+    participant Queue as Redis Queue (BullMQ)
+    participant Worker as Background Worker
+    participant DB as PostgreSQL (Supabase)
+
+    Client->>Server: HTTP POST /api/data (New Ticket)
+    Server->>DB: Write ticket (status: 'pending')
+    Server->>Queue: Enqueue classification job
+    Server-->>Client: HTTP 201 Created (ticket ID)
+    Server->>Client: Socket.io Emit: 'ticket_new' (Live Card Added)
+    
+    Queue->>Worker: Dequeue job
+    Worker->>DB: Perform pgvector cache search
+    alt Cache Miss
+      Worker->>Worker: Call embedding (BAAI)
+      Worker->>Worker: Call LLM (DeepSeek)
+      Worker->>DB: Save new embedding & classification
+    else Cache Hit
+      Worker->>DB: Retrieve cached classification
+    end
+    Worker->>DB: Update ticket (status: 'completed', classification, draft)
+    Worker-->>Queue: Job completed event
+
+    Server->>Queue: QueueEvents: 'completed'
+    Server->>DB: Query completed ticket record
+    Server->>Client: Socket.io Emit: 'ticket_resolved' (Live UI Update)
+```
+
+---
+
+## Folder Structure
 
 ```text
 TriageSystem/
  ├── backend/
- │    ├── controller/
- │    ├── routes/
+ │    ├── controller/           # Ingestion and ticket management logic
+ │    ├── routes/               # API endpoints (/api/data, /api/tickets, /api/analytics)
  │    ├── utils/
- │    │    ├── agent/
- │    │    ├── bullmq/
- │    │    ├── redis/
- │    │    ├── supabase/
- │    │    └── test/
+ │    │    ├── agent/           # HF LLM classification and embedding generation
+ │    │    ├── bullmq/          # BullMQ queue config, background worker, and QueueEvents listener
+ │    │    ├── redis/           # Redis connection configuration
+ │    │    ├── socket/          # Socket.io server instance helper
+ │    │    ├── supabase/        # Database pool setup
+ │    │    └── test/            # HTTP endpoint integration test script
  │    ├── .env
- │    ├── main.js
+ │    ├── main.js               # App entrypoint (initializes Express, WebSockets, & QueueEvents)
  │    ├── package.json
- │    └── swagger.yaml
+ │    └── swagger.yaml          # OpenAPI schema spec
+ ├── frontend/
+ │    ├── public/
+ │    ├── src/
+ │    │    ├── assets/
+ │    │    ├── hooks/
+ │    │    │    └── useTicketSocket.js  # Real-time state syncing hook
+ │    │    ├── App.jsx          # Agent dashboard application
+ │    │    ├── index.css        # Premium dashboard styles
+ │    │    └── main.jsx
+ │    ├── index.html
+ │    ├── package.json
+ │    └── vite.config.js        # Vite build config with server proxy setups
  └── .gitignore
 ```
-**Architecture Pattern:** 
-The application follows a decoupled backend architecture utilizing the **Controller-Route** pattern for the REST API, combined with an **Agentic Background Worker** pattern. The main API ingests data synchronously and places it onto a Redis queue. A separate BullMQ worker picks up the job asynchronously, performs vector similarity search in Supabase, and queries the Hugging Face Inference API if a cache miss occurs, ensuring scalable and non-blocking operations.
 
-## File Directory Breakdown
+---
 
-| Directory / File | Description |
-|---|---|
-| `/backend/main.js` | The main entry point for the Express server. Initializes middleware, loads Swagger docs, and starts the database connections. |
-| `/backend/routes/dataRoutes.js` | Defines the REST API endpoints (e.g., POST `/api/data`) for incoming ticket ingestion. |
-| `/backend/controller/dataController.js` | Handles the business logic for the API routes. Inserts new ticket data into Supabase and enqueues background jobs via BullMQ. |
-| `/backend/utils/agent/agent.js` | Manages LLM interactions via Hugging Face. Handles text embeddings (BAAI) and ticket classification parsing (DeepSeek). |
-| `/backend/utils/bullmq/worker.js` | Defines the BullMQ worker that processes background jobs. Updates the DB with processing status, cache hits/misses, and handles errors. |
-| `/backend/utils/bullmq/taskProcessor.js` | Core business logic for the worker. Executes the semantic cache check (vector search) and triggers the LLM fallback if no similar ticket exists. |
-| `/backend/utils/bullmq/queue.js` | Initializes and exports the BullMQ queue for routing incoming tickets. |
-| `/backend/utils/supabase/connectSupabase.js` | Establishes the PostgreSQL database connection pool for Supabase. |
-| `/backend/utils/redis/connectRedis.js` | Establishes the connection to the Redis instance. |
-| `/backend/swagger.yaml` | OpenAPI specification file for documenting the REST API endpoints. |
-| `/backend/package.json` | Defines project dependencies, scripts, and metadata. |
+## REST API Endpoints
+
+All management endpoints are documented natively and can be tested at `http://localhost:5000/api-docs`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| **POST** | `/api/data` | Public ticket ingestion endpoint. Adds ticket to Supabase and enqueues job. |
+| **GET** | `/api/tickets` | Lists tickets with filtering (`status`, `customer_mail`, `category`, `priority`, `sentiment`) & pagination (`limit`, `page`). |
+| **GET** | `/api/tickets/:id` | Retrieves status and details of a single ticket by UUID. |
+| **PATCH** | `/api/tickets/:id` | Updates ticket details, overrides classification values, or edits draft response. |
+| **DELETE** | `/api/tickets/:id` | Safe transactional delete of a ticket and its vector embeddings. |
+| **GET** | `/api/analytics` | Fetches ticket distributions (priority, category, sentiment, status) and cache-hit ratios. |
+| **GET** | `/health` | Ingestion service check. |
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 * Node.js (v18+ recommended)
-* Redis Server (running locally or remotely)
-* Supabase Account (with a PostgreSQL database and `pgvector` enabled)
+* Redis Server (running locally or cloud instance)
+* Supabase Account (with PostgreSQL and `pgvector` enabled)
 * Hugging Face API Token
 
-### Installation & Setup
+### Setup & Installation
 
-1. **Clone the repository**
-```bash
-git clone <your-repo-url>
-cd TriageSystem/backend
-```
+#### 1. Configure the Backend
+1. Navigate to the `backend` folder:
+   ```bash
+   cd TriageSystem/backend
+   ```
+2. Install package dependencies:
+   ```bash
+   npm install
+   ```
+3. Create a `.env` file in the `backend` directory and add the following keys:
+   ```env
+   PORT=5000
+   REDIS_URL=redis://your-redis-url:port
+   SUPABASE_URL=postgresql://postgres:password@your-supabase-host:5432/postgres
+   HF_TOKEN=your_huggingface_api_token
+   ```
 
-2. **Install dependencies**
-```bash
-npm install
-```
+#### 2. Configure the Frontend
+1. Navigate to the `frontend` folder:
+   ```bash
+   cd ../frontend
+   ```
+2. Install package dependencies:
+   ```bash
+   npm install
+   ```
 
-3. **Configure Environment Variables**
-Create a `.env` file in the `backend` directory (if not present) and add the following keys:
-```env
-PORT=5000
-REDIS_URL=redis://localhost:6379
-HF_TOKEN=your_huggingface_api_token
-# Supabase Postgres connection string
-DATABASE_URL=postgres://user:password@host:port/dbname
-```
+---
 
-4. **Database Setup**
-Ensure your Supabase database has the `pgvector` extension enabled and the required tables (`tickets`, `ticket_embeddings`) and functions (e.g., `match_tickets`) are created.
+### Running the System
 
-5. **Run the Server and Worker**
-Start the application (this will initialize both the Express API and the BullMQ worker):
-```bash
-node main.js
-```
+To run the full triage pipeline, you need to spin up both servers:
 
-6. **Access API Documentation**
-Navigate to `http://localhost:5000/api-docs` in your browser to view and interact with the API endpoints via Swagger UI.
+1. **Start the Backend**:
+   In the `/backend` directory, boot up the Express server, background workers, and WebSocket listeners:
+   ```bash
+   node main.js
+   ```
+2. **Start the Frontend**:
+   In the `/frontend` directory, start the Vite developer client:
+   ```bash
+   npm run dev
+   ```
+3. **Usage**:
+   * Open the dashboard at `http://localhost:5173` (or the port specified by Vite).
+   * Submit new issues in the **Mock Ingestion Portal** on the right side of the dashboard to see them propagate, triage, and complete in real-time.
+   * Access interactive Swagger API documentation at `http://localhost:5000/api-docs`.
