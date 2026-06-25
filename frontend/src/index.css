@@ -491,3 +491,73 @@ textarea.form-control {
   width: 48px;
   height: 48px;
 }
+
+/* ==========================================
+   Responsive Design & Media Queries
+   ========================================== */
+
+/* Tablet & Smaller Desktop View (e.g., max-width: 1024px) */
+@media screen and (max-width: 1024px) {
+  .dashboard-container {
+    grid-template-columns: 280px 1fr;
+  }
+  .detail-content {
+    grid-template-columns: 1fr; /* Stack the main workspace and override forms */
+    overflow-y: auto;
+  }
+}
+
+/* Mobile & Small Tablet View (e.g., max-width: 768px) */
+@media screen and (max-width: 768px) {
+  body {
+    overflow: auto; /* Allow full body scroll since columns stack vertically */
+    height: auto;
+  }
+  #root {
+    height: auto;
+  }
+  .dashboard-container {
+    grid-template-columns: 1fr; /* Stack the Inbox sidebar and Triage details vertically */
+    height: auto;
+    overflow: visible;
+  }
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 350px; /* Restrict inbox height so workspace is easily reachable */
+  }
+  .detail-area {
+    height: auto;
+    overflow: visible;
+  }
+  .detail-content {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+  .navbar {
+    padding: 0 1.25rem;
+  }
+}
+
+/* Compact Mobile View (e.g., max-width: 480px) */
+@media screen and (max-width: 480px) {
+  .navbar {
+    flex-direction: column;
+    height: auto;
+    padding: 1rem;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  .logo {
+    font-size: 1.1rem;
+  }
+  .detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  .detail-header-info h1 {
+    font-size: 1.25rem;
+  }
+}
